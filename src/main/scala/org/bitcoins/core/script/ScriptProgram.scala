@@ -1,7 +1,7 @@
 package org.bitcoins.core.script
 
 
-import org.bitcoins.core.crypto.{BaseTransactionSignatureComponent, TransactionSignatureComponent, WitnessV0TransactionSignatureComponent}
+import org.bitcoins.core.crypto.{BaseTransactionSignatureComponent, FedPegTransactionSignatureComponent, TransactionSignatureComponent, WitnessV0TransactionSignatureComponent}
 import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.number.UInt32
 import org.bitcoins.core.protocol.script._
@@ -262,6 +262,9 @@ object ScriptProgram {
     case w: WitnessV0TransactionSignatureComponent =>
       ScriptProgram(w.transaction, w.scriptPubKey, w.inputIndex,
         stack, script, w.flags, w.witness, w.amount)
+    case f : FedPegTransactionSignatureComponent =>
+      ScriptProgram(f.transaction, f.scriptPubKey, f.inputIndex, stack, script, f.flags,
+        f.witnessTxSigComponent.witness, f.witnessTxSigComponent.amount)
   }
 
   def apply(txSignatureComponent: TransactionSignatureComponent, stack: Seq[ScriptToken], script: Seq[ScriptToken],
@@ -271,6 +274,9 @@ object ScriptProgram {
         script.toList,originalScript.toList,Nil,b.flags,None)
     case w: WitnessV0TransactionSignatureComponent =>
       ScriptProgram(w,stack,script,originalScript,Nil,w.flags,w.amount)
+    case f : FedPegTransactionSignatureComponent =>
+      //TODO:
+      PreExecutionScriptProgramImpl(f,stack.toList,script.toList,originalScript.toList,Nil,f.flags)
   }
 
 
@@ -281,6 +287,10 @@ object ScriptProgram {
     case w : WitnessV0TransactionSignatureComponent =>
       ScriptProgram(w.transaction, w.scriptPubKey,
         w.inputIndex, w.flags, w.amount)
+    case f : FedPegTransactionSignatureComponent =>
+      //TODO: Review this
+      PreExecutionScriptProgramImpl(f,Nil,f.scriptSignature.asm.toList,f.scriptSignature.asm.toList,Nil,f.flags)
+      //ScriptProgram(f.transaction,f.scriptPubKey, f.inputIndex, f.flags, f.witnessTxSigComponent.amount)
   }
 
   /** Creates a fresh [[PreExecutionScriptProgram]] */
@@ -298,6 +308,12 @@ object ScriptProgram {
             originalScript: Seq[ScriptToken], altStack: Seq[ScriptToken], flags: Seq[ScriptFlag], amount: CurrencyUnit): PreExecutionScriptProgram = {
       ScriptProgram(txSigComponent.transaction, txSigComponent.scriptPubKey, txSigComponent.inputIndex, stack,
         script,originalScript, altStack,flags, txSigComponent.sigVersion, amount)
+  }
+
+  def apply(txSigComponent: FedPegTransactionSignatureComponent, stack: Seq[ScriptToken], script: Seq[ScriptToken],
+            originalScript: Seq[ScriptToken], altStack: Seq[ScriptToken], flags: Seq[ScriptFlag], amount: CurrencyUnit): PreExecutionScriptProgram = {
+    ScriptProgram(txSigComponent.transaction, txSigComponent.scriptPubKey, txSigComponent.inputIndex, stack,
+      script,originalScript, altStack,flags, txSigComponent.sigVersion, amount)
   }
 
 

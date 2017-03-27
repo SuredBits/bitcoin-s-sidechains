@@ -3,6 +3,7 @@ package org.bitcoins.core.gen
 import org.bitcoins.core.bloom.BloomFilter
 import org.bitcoins.core.crypto.DoubleSha256Digest
 import org.bitcoins.core.protocol.blockchain.{Block, MerkleBlock, PartialMerkleTree}
+import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.util.BitcoinSLogger
 import org.scalacheck.Gen
 
@@ -11,12 +12,16 @@ import org.scalacheck.Gen
   */
 trait MerkleGenerator extends BitcoinSLogger {
 
-  /** Returns a [[MerkleBlock]] including the sequence of hashes inserted in to the bloom filter */
-  def merkleBlockWithInsertedTxIds: Gen[(MerkleBlock,Block,Seq[DoubleSha256Digest])] = for {
-    block <- BlockchainElementsGenerator.block
-    txIds <- Gen.someOf(block.transactions.map(_.txId))
+
+  /** Generates a merkle block with the given txs matched inside the [[PartialMerkleTree]] */
+  def merkleBlockWithInsertedTxIds(txs: Seq[Transaction]): Gen[(MerkleBlock, Block, Seq[DoubleSha256Digest])] = for {
+    block <- BlockchainElementsGenerator.block(txs)
+    txIds = txs.map(_.txId)
     merkleBlock = MerkleBlock(block,txIds)
   } yield (merkleBlock, block, txIds)
+
+  /** Returns a [[MerkleBlock]] including the sequence of hashes inserted in to the bloom filter */
+  def merkleBlockWithInsertedTxIds: Gen[(MerkleBlock,Block,Seq[DoubleSha256Digest])] = merkleBlockWithInsertedTxIds(Nil)
 
 
   /** Returns a [[MerkleBlock]] created with a [[org.bitcoins.core.bloom.BloomFilter]], with the block it was created from
@@ -24,7 +29,6 @@ trait MerkleGenerator extends BitcoinSLogger {
     * NOTE: Since bloom filters can produce false positives, it is possible that there will be
     * matches in the parital merkle tree that SHOULD NOT be matched. Bloom filters do not guaratnee no
     * false negatives.
-    * @return
     */
   def merkleBlockCreatedWithBloomFilter: Gen[(MerkleBlock, Block,Seq[DoubleSha256Digest], BloomFilter)] = for {
     block <- BlockchainElementsGenerator.block

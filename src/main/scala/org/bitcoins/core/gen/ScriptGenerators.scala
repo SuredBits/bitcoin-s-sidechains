@@ -1,15 +1,17 @@
 package org.bitcoins.core.gen
 
+import java.security.SecureRandom
+
 import org.bitcoins.core.crypto.{TransactionSignatureCreator, _}
 import org.bitcoins.core.currency.{CurrencyUnit, CurrencyUnits}
 import org.bitcoins.core.number.UInt32
 import org.bitcoins.core.policy.Policy
 import org.bitcoins.core.protocol.script.{P2SHScriptPubKey, _}
-import org.bitcoins.core.protocol.transaction.{TransactionConstants, TransactionWitness}
+import org.bitcoins.core.protocol.transaction.{TransactionConstants, TransactionOutput, TransactionWitness}
 import org.bitcoins.core.script.ScriptSettings
 import org.bitcoins.core.script.constant.{OP_16, ScriptNumber}
 import org.bitcoins.core.script.crypto.{HashType, SIGHASH_ALL}
-import org.bitcoins.core.util.BitcoinSLogger
+import org.bitcoins.core.util.{BitcoinSLogger, BitcoinSUtil}
 import org.scalacheck.Gen
 
 /**
@@ -70,6 +72,25 @@ trait ScriptGenerators extends BitcoinSLogger {
     sigs = privKeys.map(key => key.sign(hash))
   } yield CSVScriptSignature(csv, sigs, pubKeys)
 
+  def contract(hash: Sha256Hash160Digest): Gen[Contract] = for {
+    prefix <- contractPrefix
+    c = Contract(prefix,hash)
+  } yield c
+
+  /** Generator for a contract used within a [[WithdrawScriptSignature]] */
+  def contract: Gen[Contract] = for {
+    hash <- CryptoGenerators.sha256Hash160Digest
+    c <- contract(hash)
+  } yield c
+
+  def contractPrefix: Gen[ContractPrefix] = Gen.oneOf(Seq(P2PHContractPrefix, P2SHContractPrefix))
+
+  def withdrawScriptSignature: Gen[WithdrawScriptSignature] = for {
+    c <- contract
+    (merkleBlock,_,_) <- MerkleGenerator.merkleBlockWithInsertedTxIds
+    lockingTx <- TransactionGenerators.transaction
+    outputIndex <- Gen.choose(0,lockingTx.outputs.size)
+  } yield WithdrawScriptSignature(c,merkleBlock,lockingTx,UInt32(outputIndex))
 
   def p2pkScriptPubKey : Gen[(P2PKScriptPubKey, ECPrivateKey)] = for {
     privKey <- CryptoGenerators.privateKey
@@ -141,11 +162,16 @@ trait ScriptGenerators extends BitcoinSLogger {
     hash <- CryptoGenerators.doubleSha256Digest
   } yield (WitnessCommitment(hash),Nil)
 
+  def withdrawScriptPubKey: Gen[(WithdrawScriptPubKey, Seq[ECPrivateKey])] = for {
+    hash <- CryptoGenerators.doubleSha256Digest
+  } yield (WithdrawScriptPubKey(hash),Nil)
+
   def pickRandomNonP2SHScriptPubKey: Gen[(ScriptPubKey, Seq[ECPrivateKey])] = {
     Gen.oneOf(p2pkScriptPubKey.map(privKeyToSeq(_)), p2pkhScriptPubKey.map(privKeyToSeq(_)),
       cltvScriptPubKey.suchThat(!_._1.scriptPubKeyAfterCLTV.isInstanceOf[CSVScriptPubKey]),
       csvScriptPubKey.suchThat(!_._1.scriptPubKeyAfterCSV.isInstanceOf[CLTVScriptPubKey]),
-      multiSigScriptPubKey, witnessScriptPubKeyV0, unassignedWitnessScriptPubKey
+      multiSigScriptPubKey, witnessScriptPubKeyV0, unassignedWitnessScriptPubKey/*,
+      withdrawScriptPubKey*/
     )
   }
 
@@ -162,13 +188,13 @@ trait ScriptGenerators extends BitcoinSLogger {
     Gen.oneOf(p2pkScriptPubKey.map(privKeyToSeq(_)),p2pkhScriptPubKey.map(privKeyToSeq(_)),
       multiSigScriptPubKey,emptyScriptPubKey,
       cltvScriptPubKey,csvScriptPubKey,witnessScriptPubKeyV0,unassignedWitnessScriptPubKey,
-      p2shScriptPubKey, witnessCommitment)
+      p2shScriptPubKey, witnessCommitment/*, withdrawScriptPubKey*/)
   }
 
   /** Generates an arbitrary [[ScriptSignature]] */
   def scriptSignature : Gen[ScriptSignature] = {
     Gen.oneOf(p2pkScriptSignature,p2pkhScriptSignature,multiSignatureScriptSignature,
-      emptyScriptSignature,p2shScriptSignature)
+      emptyScriptSignature,p2shScriptSignature/*, withdrawScriptSignature*/)
   }
 
   /**
@@ -183,6 +209,7 @@ trait ScriptGenerators extends BitcoinSLogger {
     case cltv : CLTVScriptPubKey => cltvScriptSignature
     case csv : CSVScriptPubKey => csvScriptSignature
     case _ : WitnessScriptPubKeyV0 | _ : UnassignedWitnessScriptPubKey => emptyScriptSignature
+    case w: WithdrawScriptPubKey => withdrawlScript.map(_._1)
     case x @ (_: P2SHScriptPubKey | _: NonStandardScriptPubKey | _ : WitnessCommitment) =>
       throw new IllegalArgumentException("Cannot pick for p2sh script pubkey, " +
         "non standard script pubkey or witness commitment got: " + x)
@@ -298,7 +325,7 @@ trait ScriptGenerators extends BitcoinSLogger {
       case _: UnassignedWitnessScriptPubKey | _: WitnessScriptPubKeyV0 =>
         throw new IllegalArgumentException("Cannot created a witness scriptPubKey for a CSVScriptSig since we do not have a witness")
       case _ : P2SHScriptPubKey | _ : CLTVScriptPubKey | _ : CSVScriptPubKey | _ : NonStandardScriptPubKey
-           | _ : WitnessCommitment | EmptyScriptPubKey => throw new IllegalArgumentException("We only " +
+           | _ : WitnessCommitment | _ : WithdrawScriptPubKey | EmptyScriptPubKey => throw new IllegalArgumentException("We only " +
         "want to generate P2PK, P2PKH, and MultiSig ScriptSignatures when creating a CSVScriptSignature")
   }
 
@@ -324,7 +351,7 @@ trait ScriptGenerators extends BitcoinSLogger {
       case _: UnassignedWitnessScriptPubKey | _: WitnessScriptPubKeyV0 =>
         throw new IllegalArgumentException("Cannot created a witness scriptPubKey for a CSVScriptSig since we do not have a witness")
       case _ : P2SHScriptPubKey | _ : CLTVScriptPubKey | _ : CSVScriptPubKey | _ : NonStandardScriptPubKey
-           | _ : WitnessCommitment | EmptyScriptPubKey => throw new IllegalArgumentException("We only " +
+           | _ : WitnessCommitment | _ : WithdrawScriptPubKey | EmptyScriptPubKey => throw new IllegalArgumentException("We only " +
         "want to generate P2PK, P2PKH, and MultiSig ScriptSignatures when creating a CLTVScriptSignature.")
   }
 
@@ -423,6 +450,26 @@ trait ScriptGenerators extends BitcoinSLogger {
     val (s,key) = tuple
     (s,Seq(key))
   }
+
+
+  /** Returns a valid [[WithdrawScriptSignature]], the [[WithdrawScriptPubKey]] it spends and
+    * the federated peg scriptPubkey */
+  def withdrawlScript: Gen[(WithdrawScriptSignature, WithdrawScriptPubKey, ScriptPubKey, CurrencyUnit)] = for {
+    genesisBlockHash <- CryptoGenerators.doubleSha256Digest
+    userSidechainAddr <- CryptoGenerators.sha256Hash160Digest
+    reserveAmount <- CurrencyUnitGenerator.satoshis
+    amount <- CurrencyUnitGenerator.satoshis.suchThat(_ <= reserveAmount)
+    (sidechainCreditingTx,outputIndex) = TransactionGenerators.buildSidechainCreditingTx(genesisBlockHash, reserveAmount)
+    sidechainCreditingOutput = sidechainCreditingTx.outputs(outputIndex.toInt)
+    c <- contract(userSidechainAddr)
+    (fedPegScript,_) <- ScriptGenerators.multiSigScriptPubKey
+    lockingScriptPubKey = P2SHScriptPubKey(fedPegScript)
+    (lockTx,lockTxOutputIndex) = TransactionGenerators.buildCreditingTransaction(lockingScriptPubKey,amount)
+    (merkleBlock,_,_) <- MerkleGenerator.merkleBlockWithInsertedTxIds(Seq(lockTx))
+    withdrawlScriptSig = WithdrawScriptSignature(c,merkleBlock,lockTx,outputIndex)
+  } yield (withdrawlScriptSig,sidechainCreditingOutput.scriptPubKey.asInstanceOf[WithdrawScriptPubKey],fedPegScript,reserveAmount)
+
+
 }
 
 object ScriptGenerators extends ScriptGenerators

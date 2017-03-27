@@ -8,7 +8,7 @@ import org.bitcoins.core.script.ScriptSettings
 import org.bitcoins.core.script.bitwise.{OP_EQUAL, OP_EQUALVERIFY}
 import org.bitcoins.core.script.constant.{BytesToPushOntoStack, _}
 import org.bitcoins.core.script.control.OP_RETURN
-import org.bitcoins.core.script.crypto.{OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY, OP_CHECKSIG, OP_HASH160}
+import org.bitcoins.core.script.crypto._
 import org.bitcoins.core.script.locktime.{OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY}
 import org.bitcoins.core.script.reserved.UndefinedOP_NOP
 import org.bitcoins.core.script.stack.{OP_DROP, OP_DUP}
@@ -515,6 +515,7 @@ object ScriptPubKey extends Factory[ScriptPubKey] with BitcoinSLogger {
     case _ if CSVScriptPubKey.isCSVScriptPubKey(asm) => CSVScriptPubKey(asm)
     case _ if WitnessScriptPubKey.isWitnessScriptPubKey(asm) => WitnessScriptPubKey(asm).get
     case _ if WitnessCommitment.isWitnessCommitment(asm) => WitnessCommitment(asm)
+    case _ if WithdrawScriptPubKey.isValidWithdrawScriptPubKey(asm) => WithdrawScriptPubKey.fromAsm(asm)
     case _ => NonStandardScriptPubKey(asm)
   }
 
@@ -662,5 +663,50 @@ object WitnessCommitment extends ScriptFactory[WitnessCommitment] {
       opReturn == OP_RETURN && pushOp == BytesToPushOntoStack(36) &&
       constant.hex.take(8) == commitmentHeader && asm.flatMap(_.bytes).size >= minCommitmentSize
     }
+  }
+}
+
+/** Represents the ScriptPubKey we spend from to get coins on our sidechain
+  * Always of the format
+  * [<chaindest> OP_DROP] <genesishash> OP_WITHDRAWPROOFVERIFY
+  * */
+sealed trait WithdrawScriptPubKey extends ScriptPubKey {
+  def genesisHash: DoubleSha256Digest = DoubleSha256Digest(asm(1).bytes)
+}
+
+object WithdrawScriptPubKey extends ScriptFactory[WithdrawScriptPubKey] {
+  private case class WithdrawScriptPubKeyImpl(hex: String) extends WithdrawScriptPubKey
+
+  def apply(hash: DoubleSha256Digest): WithdrawScriptPubKey = {
+    val asm = Seq(BytesToPushOntoStack(32), ScriptConstant(hash.bytes), OP_WITHDRAWPROOFVERIFY)
+    fromAsm(asm)
+  }
+
+  /** Checks if asm tokens are a valid withdraw script pubkey
+    * [[https://github.com/ElementsProject/elements/blob/a6c67028619da3d5f55fb620b9a83dc45c8f2a8e/src/script/script.cpp#L237]]
+    * */
+  def isValidWithdrawScriptPubKey(asm: Seq[ScriptToken]): Boolean = {
+    if (asm.size == 6) {
+      asm.head.isInstanceOf[BytesToPushOntoStack] &&
+      asm(1).bytes.size == 32 &&
+      asm(2) == OP_DROP &&
+      asm(3).bytes.size == 32 &&
+      asm(4) == OP_WITHDRAWPROOFVERIFY
+    } else {
+      asm.size == 3 &&
+        asm.head == BytesToPushOntoStack(32) &&
+        asm(1).bytes.size == 32 &&
+        asm(2) == OP_WITHDRAWPROOFVERIFY
+    }
+  }
+
+  override def fromAsm(asm: Seq[ScriptToken]): WithdrawScriptPubKey = {
+    buildScript(asm,WithdrawScriptPubKeyImpl(_), isValidWithdrawScriptPubKey(_),
+      "Given asm was not a valid withdrawl scriptPubKey, got: " + asm)
+  }
+
+  override def fromBytes(bytes: Seq[Byte]): WithdrawScriptPubKey = {
+    val asm = RawScriptPubKeyParser.read(bytes).asm
+    fromAsm(asm)
   }
 }

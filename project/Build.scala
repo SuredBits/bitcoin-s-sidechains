@@ -1,8 +1,8 @@
 import sbt._
 import Keys._ 
-object BitcoinSCoreBuild extends Build {
+object BitcoinSidechainsBuild extends Build {
 
-  val appName = "bitcoin-s-core"
+  val appName = "bitcoin-s-sidechains"
   val appV = "0.0.1" 
   val scalaV = "2.11.7"
   val organization = "org.bitcoins.core"

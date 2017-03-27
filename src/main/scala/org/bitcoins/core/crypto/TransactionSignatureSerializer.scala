@@ -227,6 +227,9 @@ trait TransactionSignatureSerializer extends RawBitcoinSerializerHelper with Bit
         hashForSignature(t.transaction,t.inputIndex,script,hashType)
       case w : WitnessV0TransactionSignatureComponent =>
         hashForSignature(w.transaction,w.inputIndex, script, hashType,w.amount, w.sigVersion)
+      case f : FedPegTransactionSignatureComponent =>
+        hashForSignature(f.transaction,f.inputIndex,script,hashType,f.witnessTxSigComponent.amount,
+          f.witnessTxSigComponent.sigVersion)
     }
   }
 

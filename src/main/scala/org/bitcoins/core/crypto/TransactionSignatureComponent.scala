@@ -1,10 +1,14 @@
 package org.bitcoins.core.crypto
 
+import org.bitcoins.core.crypto.WitnessV0TransactionSignatureComponent.WitnessV0TransactionSignatureComponentImpl
 import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.number.UInt32
 import org.bitcoins.core.protocol.script._
 import org.bitcoins.core.protocol.transaction.{BaseTransaction, Transaction, TransactionOutput, WitnessTransaction}
+import org.bitcoins.core.script.constant.ScriptToken
 import org.bitcoins.core.script.flag.ScriptFlag
+
+import scala.annotation.tailrec
 
 /**
  * Created by chris on 4/6/16.
@@ -52,6 +56,32 @@ sealed trait WitnessV0TransactionSignatureComponent extends TransactionSignature
 
 }
 
+sealed trait FedPegTransactionSignatureComponent extends TransactionSignatureComponent {
+  def witnessTxSigComponent: WitnessV0TransactionSignatureComponent
+  def fedPegScript: ScriptPubKey
+
+
+  override def flags = witnessTxSigComponent.flags
+  override def inputIndex = witnessTxSigComponent.inputIndex
+  override def scriptPubKey = witnessTxSigComponent.scriptPubKey
+  override def sigVersion = witnessTxSigComponent.sigVersion
+  override def transaction = witnessTxSigComponent.transaction
+
+  /** Grabs the [[TransactionOutput]] that is offset from the given inputIndex */
+  def getOutputOffSetFromCurrent(offset: Int): Option[TransactionOutput] = {
+    require(witnessTxSigComponent.inputIndex >= UInt32.zero && witnessTxSigComponent.transaction.outputs.size > 0)
+    val c = witnessTxSigComponent
+    val tx = witnessTxSigComponent.transaction
+    val inputIndex = c.inputIndex.toInt
+    val outputSize = c.transaction.outputs.size
+    if (inputIndex + offset < 0 || outputSize <= (inputIndex + offset)) {
+      None
+    } else {
+      Some(transaction.outputs(inputIndex + offset))
+    }
+  }
+}
+
 object TransactionSignatureComponent {
 
   private case class BaseTransactionSignatureComponentImpl(transaction : Transaction, inputIndex : UInt32,
@@ -81,6 +111,9 @@ object TransactionSignatureComponent {
       base.inputIndex,scriptPubKey, base.flags)
     case w: WitnessV0TransactionSignatureComponent =>
       TransactionSignatureComponent(w.transaction,w.inputIndex,scriptPubKey,w.flags,w.amount,w.sigVersion)
+    case f : FedPegTransactionSignatureComponent =>
+      FedPegTransactionSignatureComponent(f.transaction,f.inputIndex,scriptPubKey,f.flags,
+        f.witnessTxSigComponent.amount, f.witnessTxSigComponent.sigVersion, f.fedPegScript)
   }
 }
 
@@ -99,5 +132,22 @@ object WitnessV0TransactionSignatureComponent {
   def apply(transaction : Transaction, inputIndex : UInt32, output : TransactionOutput,
             flags : Seq[ScriptFlag], sigVersion: SignatureVersion): WitnessV0TransactionSignatureComponent = {
     WitnessV0TransactionSignatureComponent(transaction,inputIndex,output.scriptPubKey,flags,output.value, sigVersion)
+  }
+}
+
+object FedPegTransactionSignatureComponent {
+  private case class FedPegTransactionSignatureComponentImpl(witnessTxSigComponent: WitnessV0TransactionSignatureComponent,
+                                                             fedPegScript: ScriptPubKey) extends FedPegTransactionSignatureComponent
+
+
+  def apply(witnessTxSigComponent : WitnessV0TransactionSignatureComponent,
+            fedPegScript: ScriptPubKey): FedPegTransactionSignatureComponent = {
+    FedPegTransactionSignatureComponentImpl(witnessTxSigComponent,fedPegScript)
+  }
+
+  def apply(transaction : Transaction, inputIndex : UInt32, scriptPubKey : ScriptPubKey,
+            flags : Seq[ScriptFlag], amount: CurrencyUnit, sigVersion: SignatureVersion, fedPegScript: ScriptPubKey) : FedPegTransactionSignatureComponent = {
+    val w = WitnessV0TransactionSignatureComponent(transaction,inputIndex,scriptPubKey,flags,amount,sigVersion)
+    FedPegTransactionSignatureComponentImpl(w,fedPegScript)
   }
 }

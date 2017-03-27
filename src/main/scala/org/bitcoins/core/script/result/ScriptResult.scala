@@ -237,6 +237,52 @@ case object ScriptErrorWitnessPubKeyType extends ScriptError {
   override def description = "WITNESS_PUBKEYTYPE"
 }
 
+//SCRIPT_ERR_WITHDRAW_VERIFY_FORMAT,
+case object ScriptErrorWithdrawVerifyFormat extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_FORMAT"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_BLOCK,
+case object ScriptErrorWithdrawVerifyBlock extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_BLOCK"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_LOCKTX,
+case object ScriptErrorWithdrawVerifyLockTx extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_LOCKTX"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_OUTPUT,
+case object ScriptErrorWithdrawVerifyOutput extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_OUTPUT"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_OUTPUT_SCRIPTDEST,
+case object ScriptErrorWithdrawVerifyOutputScriptDest extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_OUTPUT_SCRIPTDEST"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_RELOCK_SCRIPTVAL,
+case object ScriptErrorWithdrawVerifyRelockScriptVal extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_RELOCK_SCRIPTVAL"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_OUTPUT_VAL,
+case object ScriptErrorWithdrawVerifyOutputVal extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_OUTPUT_VAL"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_OUTPUT_SCRIPT,
+case object ScriptErrorWithdrawVerifyOutputScript extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_OUTPUT_SCRIPT"
+}
+
+//SCRIPT_ERR_WITHDRAW_VERIFY_BLOCKCONFIRMED,
+case object ScriptErrorWithdrawVerifyBlockConfirmed extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_BLOCKCONFIRMED"
+}
+//SCRIPT_ERR_WITHDRAW_VERIFY_BLINDED_AMOUNTS,
+case object ScriptErrorWithdrawVerifyBlindedAmounts extends ScriptError {
+  override def description = "WITHDRAW_VERIFY_BLINDED_AMOUNTS"
+}
+
+//SCRIPT_ERR_ERROR_COUNT
+case object ScriptErrorErrorCount extends ScriptError {
+  override def description = "ERROR_COUNT"
+}
 
 
 /**

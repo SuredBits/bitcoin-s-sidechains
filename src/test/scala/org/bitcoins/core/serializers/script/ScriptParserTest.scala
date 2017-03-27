@@ -5,8 +5,9 @@ import org.bitcoins.core.script.arithmetic.{OP_1ADD, OP_ADD}
 import org.bitcoins.core.script.bitwise.OP_EQUAL
 import org.bitcoins.core.script.constant._
 import org.bitcoins.core.script.control.{OP_ENDIF, OP_IF}
-import org.bitcoins.core.script.crypto.{OP_CHECKMULTISIG, OP_HASH160}
-import org.bitcoins.core.script.reserved.{OP_NOP10, OP_NOP}
+import org.bitcoins.core.script.crypto.{OP_CHECKMULTISIG, OP_HASH160, OP_REORGPROOFVERIFY, OP_WITHDRAWPROOFVERIFY}
+import org.bitcoins.core.script.locktime.{OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY}
+import org.bitcoins.core.script.reserved.{OP_NOP6, OP_NOP7, OP_NOP8, OP_NOP9, _}
 import org.bitcoins.core.script.stack.OP_PICK
 import org.bitcoins.core.util.{BitcoinSUtil, TestUtil}
 import org.scalatest.{FlatSpec, MustMatchers}
@@ -212,4 +213,11 @@ class ScriptParserTest extends FlatSpec with MustMatchers with ScriptParser with
      )))
    }
 
+
+  it must "parse a string repurposed OP_NOPs correctly" in {
+    val str = "NOP1 CHECKLOCKTIMEVERIFY CHECKSEQUENCEVERIFY NOP4 NOP5 NOP6 NOP7 NOP8 NOP9 NOP10 1 EQUAL"
+    val asm = ScriptParser.fromString(str)
+    asm must be (List(OP_NOP1, OP_CHECKLOCKTIMEVERIFY, OP_CHECKSEQUENCEVERIFY,
+      OP_WITHDRAWPROOFVERIFY, OP_REORGPROOFVERIFY, OP_NOP6, OP_NOP7, OP_NOP8, OP_NOP9, OP_NOP10, OP_1, OP_EQUAL))
+  }
 }

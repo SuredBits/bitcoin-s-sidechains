@@ -26,7 +26,10 @@ trait Policy {
     ScriptVerifyMinimalData, ScriptVerifyNullDummy, ScriptVerifyDiscourageUpgradableNOPs,
     ScriptVerifyCleanStack, ScriptVerifyCheckLocktimeVerify, ScriptVerifyCheckSequenceVerify,
     ScriptVerifyLowS, ScriptVerifyWitness, ScriptVerifyMinimalIf, ScriptVerifyNullFail,
-    ScriptVerifyNullDummy, ScriptVerifyWitnessPubKeyType, ScriptVerifyDiscourageUpgradableWitnessProgram)
+    ScriptVerifyNullDummy, ScriptVerifyWitnessPubKeyType, ScriptVerifyDiscourageUpgradableWitnessProgram,
+    //sidechain script flags
+    ScriptVerifyWithdraw
+  )
 
 }
 

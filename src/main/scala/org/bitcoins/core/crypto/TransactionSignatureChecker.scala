@@ -59,6 +59,9 @@ trait TransactionSignatureChecker extends BitcoinSLogger {
             sigsRemovedScript, hashType)
         case w : WitnessV0TransactionSignatureComponent =>
           TransactionSignatureSerializer.hashForSignature(w.transaction,w.inputIndex,sigsRemovedScript, hashType, w.amount,w.sigVersion)
+        case f : FedPegTransactionSignatureComponent =>
+          val w = f.witnessTxSigComponent
+          TransactionSignatureSerializer.hashForSignature(w.transaction,w.inputIndex,sigsRemovedScript, hashType, w.amount,w.sigVersion)
       }
 
       logger.debug("Hash for signature: " + BitcoinSUtil.encodeHex(hashForSignature.bytes))

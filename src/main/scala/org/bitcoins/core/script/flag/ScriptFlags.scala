@@ -132,4 +132,16 @@ case object ScriptVerifyWitnessPubKeyType extends ScriptFlag {
   override def name = "WITNESS_PUBKEYTYPE"
 }
 
+// Execute sidechain-related opcodes instead of treating them as NOPs
+case object ScriptVerifyWithdraw extends ScriptFlag {
+  override def flag = 1 << 16
+  override def name = "VERIFY_WITHDRAW"
+}
+
+// Dirty hack to require a higher bar of bitcoin block confirmation in mempool
+case object ScriptVerifyIncreaseConfirmationsRequired extends ScriptFlag {
+  override def flag = 1 << 17
+  override def name = "INCREASE_CONFIRMATIONS_REQUIRED"
+}
+
 

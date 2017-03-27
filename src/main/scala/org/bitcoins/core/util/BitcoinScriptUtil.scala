@@ -157,7 +157,8 @@ trait BitcoinScriptUtil extends BitcoinSLogger {
     //push ops following an OP_PUSHDATA operation are interpreted as unsigned numbers
     val scriptTokenSize = UInt32(scriptToken.bytes.size)
     val bytes = scriptTokenSize.bytes
-    if (scriptTokenSize <= UInt32(75)) Seq(BytesToPushOntoStack(scriptToken.bytes.size))
+    if (scriptToken.isInstanceOf[ScriptNumberOperation]) Nil
+    else if (scriptTokenSize <= UInt32(75)) Seq(BytesToPushOntoStack(scriptToken.bytes.size))
     else if (scriptTokenSize <= UInt32(OP_PUSHDATA1.max)) {
       //we need the push op to be only 1 byte in size
       val pushConstant = ScriptConstant(BitcoinSUtil.flipEndianness(bytes.slice(bytes.length-1,bytes.length)))
@@ -288,7 +289,8 @@ trait BitcoinScriptUtil extends BitcoinSLogger {
     }
   }
 
-  def calculateScriptForSigning(txSignatureComponent: TransactionSignatureComponent, script: Seq[ScriptToken]): Seq[ScriptToken] = txSignatureComponent.scriptPubKey match {
+  @tailrec
+  final def calculateScriptForSigning(txSignatureComponent: TransactionSignatureComponent, script: Seq[ScriptToken]): Seq[ScriptToken] = txSignatureComponent.scriptPubKey match {
     case p2shScriptPubKey: P2SHScriptPubKey =>
       val p2shScriptSig = P2SHScriptSignature(txSignatureComponent.scriptSignature.bytes)
       val sigsRemoved = removeSignaturesFromScript(p2shScriptSig.signatures,p2shScriptSig.redeemScript.asm)
@@ -298,12 +300,15 @@ trait BitcoinScriptUtil extends BitcoinSLogger {
         case wtxSigComponent: WitnessV0TransactionSignatureComponent =>
           val scriptEither: Either[(Seq[ScriptToken], ScriptPubKey), ScriptError] = w.witnessVersion.rebuild(wtxSigComponent.witness,w.witnessProgram)
           parseScriptEither(scriptEither)
+        case f : FedPegTransactionSignatureComponent =>
+          calculateScriptForSigning(f.witnessTxSigComponent,script)
         case base : BaseTransactionSignatureComponent =>
           //shouldn't have BaseTransactionSignatureComponent with a witness scriptPubKey
           script
       }
-    case  _ : P2PKHScriptPubKey | _ : P2PKScriptPubKey | _ : MultiSignatureScriptPubKey |
-         _ : NonStandardScriptPubKey | _ : CLTVScriptPubKey | _ : CSVScriptPubKey | _ : WitnessCommitment | EmptyScriptPubKey =>
+    case  _ : P2PKHScriptPubKey | _ : P2PKScriptPubKey | _ : MultiSignatureScriptPubKey
+          | _ : NonStandardScriptPubKey | _ : CLTVScriptPubKey | _ : CSVScriptPubKey | _ : WitnessCommitment
+          | _: WithdrawScriptPubKey | EmptyScriptPubKey =>
       script
   }
 
@@ -360,7 +365,7 @@ trait BitcoinScriptUtil extends BitcoinSLogger {
       val s = P2SHScriptSignature(tx.inputs(inputIndex.toInt).scriptSignature.bytes)
       parseSigVersion(tx,s.redeemScript,inputIndex)
     case _: P2PKScriptPubKey | _: P2PKHScriptPubKey | _: MultiSignatureScriptPubKey  | _: NonStandardScriptPubKey
-         | _: CLTVScriptPubKey | _: CSVScriptPubKey | _ : WitnessCommitment | EmptyScriptPubKey => SigVersionBase
+         | _: CLTVScriptPubKey | _: CSVScriptPubKey | _ : WitnessCommitment | _: WithdrawScriptPubKey | EmptyScriptPubKey => SigVersionBase
   }
 
 

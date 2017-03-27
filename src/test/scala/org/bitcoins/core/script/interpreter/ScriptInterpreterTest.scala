@@ -31,7 +31,7 @@ class ScriptInterpreterTest extends FlatSpec with MustMatchers with ScriptInterp
     //use this to represent a single test case from script_valid.json
 /*    val lines =
         """
-          | [ ["0 0x09 0x300602010102010101 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0", "0x01 0x14 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0x01 0x14 CHECKMULTISIG NOT", "DERSIG,NULLFAIL", "NULLFAIL", "BIP66-compliant but not NULLFAIL-compliant"]]
+          | [ ["", "0 0 0 1 CHECKMULTISIG VERIFY DEPTH 0 EQUAL", "P2SH,STRICTENC", "OK", "Zero sigs means no sigs are checked"]]
    """.stripMargin*/
     val lines = try source.getLines.filterNot(_.isEmpty).map(_.trim) mkString "\n" finally source.close()
     val json = lines.parseJson
@@ -45,6 +45,7 @@ class ScriptInterpreterTest extends FlatSpec with MustMatchers with ScriptInterp
       logger.info("Raw test case: " + testCase.raw)
       logger.info("Parsed ScriptSig: " + testCase.scriptSig)
       logger.info("Parsed ScriptPubKey: " + testCase.scriptPubKey)
+      logger.debug("Parsed scriptPubKey asm: " + testCase.scriptPubKey.asm)
       logger.info("Parsed tx: " + tx.hex)
       logger.info("Flags: " + testCase.flags)
       logger.info("Comments: " + testCase.comments)

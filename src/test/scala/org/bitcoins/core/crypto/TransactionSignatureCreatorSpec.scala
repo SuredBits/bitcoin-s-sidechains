@@ -138,4 +138,12 @@ class TransactionSignatureCreatorSpec extends Properties("TransactionSignatureCr
       if (result != ScriptOk) logger.warn("Result: " + result)
       Seq(ScriptErrorPushSize, ScriptOk).contains(result)
     }
+
+  property("generate a valid withdrawl tx from a sidechain") =
+    Prop.forAll(TransactionGenerators.withdrawlTransaction) { case (fPegSigComponent, privKeys) =>
+      val program = ScriptProgram(fPegSigComponent)
+      val result = ScriptInterpreter.run(program)
+      if (result != ScriptOk) logger.error("Script result: " + result)
+      result == ScriptOk
+    }
 }

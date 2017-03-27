@@ -1,14 +1,15 @@
 package org.bitcoins.core.gen
 
-import org.bitcoins.core.crypto.{ECPrivateKey, TransactionSignatureComponent, WitnessV0TransactionSignatureComponent}
-import org.bitcoins.core.currency.{CurrencyUnit, CurrencyUnits}
+import org.bitcoins.core.crypto._
+import org.bitcoins.core.currency.{CurrencyUnit, CurrencyUnits, Satoshis}
 import org.bitcoins.core.number.{Int64, UInt32}
 import org.bitcoins.core.policy.Policy
 import org.bitcoins.core.protocol.script._
 import org.bitcoins.core.protocol.transaction.{TransactionInput, TransactionOutPoint, TransactionOutput, _}
-import org.bitcoins.core.script.constant.ScriptNumber
+import org.bitcoins.core.script.constant.{BytesToPushOntoStack, ScriptConstant, ScriptNumber, ScriptNumberOperation}
+import org.bitcoins.core.script.crypto.OP_WITHDRAWPROOFVERIFY
 import org.bitcoins.core.script.interpreter.ScriptInterpreter
-import org.bitcoins.core.util.{BitcoinSLogger, BitcoinScriptUtil}
+import org.bitcoins.core.util.{BitcoinSLogger, BitcoinSUtil, BitcoinScriptUtil}
 import org.scalacheck.Gen
 
 /**
@@ -17,20 +18,20 @@ import org.scalacheck.Gen
 trait TransactionGenerators extends BitcoinSLogger {
 
   /** Responsible for generating [[org.bitcoins.core.protocol.transaction.TransactionOutPoint]] */
-  def outPoints : Gen[TransactionOutPoint] = for {
+  def outPoint : Gen[TransactionOutPoint] = for {
     txId <- CryptoGenerators.doubleSha256Digest
     vout <- NumberGenerator.uInt32s
   } yield TransactionOutPoint(txId, vout)
 
   /** Generates a random [[org.bitcoins.core.protocol.transaction.TransactionOutput]] */
-  def outputs : Gen[TransactionOutput] = for {
+  def output : Gen[TransactionOutput] = for {
     satoshis <- CurrencyUnitGenerator.satoshis
     (scriptPubKey, _) <- ScriptGenerators.scriptPubKey
   } yield TransactionOutput(satoshis, scriptPubKey)
 
   /** Generates a random [[org.bitcoins.core.protocol.transaction.TransactionInput]] */
-  def inputs : Gen[TransactionInput] = for {
-    outPoint <- outPoints
+  def input : Gen[TransactionInput] = for {
+    outPoint <- outPoint
     scriptSig <- ScriptGenerators.scriptSignature
     sequenceNumber <- NumberGenerator.uInt32s
     randomNum <- Gen.choose(0,10)
@@ -46,15 +47,15 @@ trait TransactionGenerators extends BitcoinSLogger {
     * This transaction's [[TransactionInput]]s will not evaluate to true
     * inside of the [[org.bitcoins.core.script.interpreter.ScriptInterpreter]]
     */
-  def transactions : Gen[Transaction] = Gen.oneOf(baseTransaction,witnessTransaction)
+  def transaction : Gen[Transaction] = Gen.oneOf(baseTransaction,witnessTransaction)
 
 
   def baseTransaction: Gen[BaseTransaction] = for {
     version <- NumberGenerator.uInt32s
     randomInputNum <- Gen.choose(1,10)
-    inputs <- Gen.listOfN(randomInputNum, inputs)
+    inputs <- Gen.listOfN(randomInputNum, input)
     randomOutputNum <- Gen.choose(1,10)
-    outputs <- Gen.listOfN(randomOutputNum, outputs)
+    outputs <- Gen.listOfN(randomOutputNum, output)
     lockTime <- NumberGenerator.uInt32s
   } yield BaseTransaction(version, inputs, outputs, lockTime)
 
@@ -62,9 +63,9 @@ trait TransactionGenerators extends BitcoinSLogger {
   def witnessTransaction: Gen[WitnessTransaction] = for {
     version <- NumberGenerator.uInt32s
     randomInputNum <- Gen.choose(1,10)
-    inputs <- Gen.listOfN(randomInputNum, inputs)
+    inputs <- Gen.listOfN(randomInputNum, input)
     randomOutputNum <- Gen.choose(1,10)
-    outputs <- Gen.listOfN(randomOutputNum, outputs)
+    outputs <- Gen.listOfN(randomOutputNum, output)
     lockTime <- NumberGenerator.uInt32s
     witness <- WitnessGenerators.transactionWitness(inputs.size)
   } yield WitnessTransaction(version,inputs,outputs,lockTime, witness)
@@ -224,6 +225,34 @@ trait TransactionGenerators extends BitcoinSLogger {
       p2shScriptPubKey, Policy.standardScriptVerifyFlags, wtxSigComponent.amount, sigVersion)
   } yield (signedTxSignatureComponent,privKeys)
 
+  /** Generates a valid withdrawl transaction.
+    * This represents a transaction on blockchain B that is withdrawing money from blockchain A.
+    * A concrete example of this is a blockchain B being a sidechain, while blockchain A is the bitcoin blockchain
+    */
+  def withdrawlTransaction: Gen[(FedPegTransactionSignatureComponent, Seq[ECPrivateKey])] = for {
+    genesisBlockHash <- CryptoGenerators.doubleSha256Digest
+    (scriptSig,scriptPubKey,fedPegScript,reserveAmount) <- ScriptGenerators.withdrawlScript
+    (sidechainCreditingTx,outputIndex) = buildSidechainCreditingTx(genesisBlockHash, reserveAmount)
+    sidechainCreditingOutput = sidechainCreditingTx.outputs(outputIndex.toInt)
+    contract = scriptSig.contract
+    sidechainUserOutput = TransactionOutput(scriptSig.withdrawlAmount,createUserSidechainScriptPubKey(contract))
+
+    n = ScriptNumberOperation.fromNumber(scriptSig.lockTxOutputIndex.toInt).getOrElse(ScriptNumber(scriptSig.lockTxOutputIndex.toInt))
+
+    federationChange = reserveAmount - scriptSig.withdrawlAmount
+    outputs = Seq(sidechainUserOutput,
+      TransactionOutput(federationChange, sidechainCreditingTx.outputs(outputIndex.toInt).scriptPubKey))
+    sequence <- NumberGenerator.uInt32s
+    inputs = Seq(TransactionInput(TransactionOutPoint(sidechainCreditingTx.txId, outputIndex), scriptSig, sequence))
+    inputIndex = UInt32.zero
+    version <- NumberGenerator.uInt32s
+    lockTime <- NumberGenerator.uInt32s
+    sidechainSpendingTx = Transaction(version,inputs,outputs,lockTime)
+    wtxSigComponent = WitnessV0TransactionSignatureComponent(sidechainSpendingTx,inputIndex,sidechainCreditingOutput,
+      Policy.standardScriptVerifyFlags, SigVersionWitnessV0)
+    fPegSigComponent = FedPegTransactionSignatureComponent(wtxSigComponent,fedPegScript)
+  } yield (fPegSigComponent,Nil)
+
   /**
     * Builds a spending transaction according to bitcoin core
     * @return the built spending transaction and the input index for the script signature
@@ -298,6 +327,15 @@ trait TransactionGenerators extends BitcoinSLogger {
 
   def buildCreditingTransaction(version: UInt32, scriptPubKey: ScriptPubKey, amount: CurrencyUnit): (Transaction,UInt32) = {
     buildCreditingTransaction(version, TransactionOutput(amount,scriptPubKey))
+  }
+
+  /** Builds the crediting OP_WPV and the output index it is located at */
+  def buildSidechainCreditingTx(genesisBlockHash: DoubleSha256Digest, reserveAmount: CurrencyUnit): (Transaction,UInt32) = {
+    val scriptPubKey = ScriptPubKey.fromAsm(Seq(BytesToPushOntoStack(32),
+      ScriptConstant(genesisBlockHash.bytes), OP_WITHDRAWPROOFVERIFY))
+    val outputs = Seq(TransactionOutput(reserveAmount,scriptPubKey))
+    val inputs = Seq(EmptyTransactionInput)
+    (Transaction(TransactionConstants.version,inputs,outputs,TransactionConstants.lockTime),UInt32.zero)
   }
 
 
@@ -378,6 +416,13 @@ trait TransactionGenerators extends BitcoinSLogger {
     sequence <- NumberGenerator.uInt32s
     csvScriptNum <- NumberGenerator.uInt32s.map(x => ScriptNumber(x.underlying)).suchThat(x => ScriptInterpreter.isLockTimeBitOff(x))
   } yield (csvScriptNum, sequence)).suchThat(x => !csvLockTimesOfSameType(x))
+
+
+  /** Creates the [[ScriptPubKey]] we are paying to on the sidechain */
+  private def createUserSidechainScriptPubKey(contract: Contract): ScriptPubKey = contract.prefix match {
+    case P2PHContractPrefix => P2PKHScriptPubKey(contract.hash)
+    case P2SHContractPrefix => P2SHScriptPubKey(contract.hash)
+  }
 }
 
 object TransactionGenerators extends TransactionGenerators
